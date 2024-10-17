@@ -112,7 +112,6 @@ void Server::removeClient(int fd) {
     delete clients[fd];
     clients.erase(fd);
 
-    // Remove from poll_fds
     for (std::vector<struct pollfd>::iterator it = poll_fds.begin(); it != poll_fds.end(); ++it) {
         if (it->fd == fd) {
             poll_fds.erase(it);
@@ -141,24 +140,6 @@ void Server::handleClientMessage(int fd) {
 
 void Server::sendMessage(int fd, const std::string& message) {
     send(fd, message.c_str(), message.length(), 0);
-}
-
-void Server::broadcastMessage(Client* client, const std::vector<std::string>& params) {
-    if (params.size() < 1) {
-        sendMessage(client->getFd(), "ERROR :Not enough parameters\r\n");
-        return;
-    }
-
-    std::string message = params[0];
-    for (size_t i = 1; i < params.size(); ++i) {
-        message += " " + params[i];
-    }
-
-    for (std::map<int, Client*>::iterator it = clients.begin(); it != clients.end(); ++it) {
-        if (it->first != client->getFd()) {
-            sendMessage(it->first, message);
-        }
-    }
 }
 
 void Server::parseCommand(Client* client, const std::string& message) {
@@ -212,7 +193,7 @@ void Server::parseCommand(Client* client, const std::string& message) {
                 joinChannel(client, params[0]);
         }
         else if (command == "MSG") {
-            broadcastMessage(client, params);
+            broadcastMessageToChannel("BITCOIN", params);
         } else if (command == "PRIVMSG") {
             handlePRIVMSG(client, params);
         } else if (command == "QUIT") {
@@ -220,7 +201,6 @@ void Server::parseCommand(Client* client, const std::string& message) {
         } else {
             sendMessage(client->getFd(), "ERROR :Unknown command\r\n");
         }
-        
     }
 }
 
@@ -240,15 +220,16 @@ void Server::joinChannel(Client *client, const std::string &name) {
     }
 }
 
-// void Server::broadcastMessageToChannel(const std::string &channelName, const std::string &message, Client *sender) {
-//     if (channels.find(channelName) != channels.end()) {
-//         for (Client* member : channels[channelName]->getMembers()) {
-//             if (member != sender) {
-//                 sendMessage(member->getFd(), message);
-//             }
-//         }
-//     }
-// }
+void Server::broadcastMessageToChannel(const std::string &channelName, const std::string &message, Client *sender) {
+    if (channels.find(channelName) != channels.end()) {
+        std::set<Client*> members = channels[channelName]->getMembers();
+        for (std::set<Client *>::iterator it = members.begin(); it != members.end(); ++it) {
+            if (*it != sender) {
+                sendMessage((*it)->getFd(), message);
+            }
+        }
+    }
+}
 
 void Server::handlePASS(Client* client, const std::vector<std::string>& params) {
     if (params.empty()) {

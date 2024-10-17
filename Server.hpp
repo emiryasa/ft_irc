@@ -42,14 +42,14 @@ class Server {
         void setNonBlocking(int fd);
         void createChannel(const std::string& name);
         void joinChannel(Client *client, const std::string &name);
-        void broadcastMessageToChannel(const std::string& channelName, const std::string& message, Client* sender);
+        void broadcastMessage(Client* client, const std::string& message);
         void parseCommand(Client* client, const std::string& message);
         void handlePASS(Client* client, const std::vector<std::string>& params);
         void handleNICK(Client* client, const std::vector<std::string>& params);
         void handleUSER(Client* client, const std::vector<std::string>& params);
         void handlePING(Client* client, const std::vector<std::string>& params);
         void handlePRIVMSG(Client* client, const std::vector<std::string>& params);
-        void handleChannelMessage(const std::string &message) const;
+        void broadcastMessageToChannel(const std::string &channelName, const std::string &message, Client *sender);
 
     public:
         Server(const std::string& port_str, const std::string& password);
