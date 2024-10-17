@@ -16,6 +16,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include "Client.hpp"
+#include "Channel.hpp"
 
 #define MAX_CLIENTS 100
 #define BUFFER_SIZE 512
@@ -29,6 +30,7 @@ class Server {
         int server_fd;
         std::string password;
         std::map<int, Client*> clients;
+        std::map<std::string, Channel*> channels;
         std::vector<struct pollfd> poll_fds;
 
         void initServer(const std::string& port_str);
@@ -36,8 +38,11 @@ class Server {
         void removeClient(int fd);
         void handleClientMessage(int fd);
         void sendMessage(int fd, const std::string& message);
-        void broadcastMessage(const std::string& message, int exclude_fd = -1);
+        void broadcastMessage(Client* client, const std::vector<std::string>& params);
         void setNonBlocking(int fd);
+        void createChannel(const std::string& name);
+        void joinChannel(Client *client, const std::string &name);
+        void broadcastMessageToChannel(const std::string& channelName, const std::string& message, Client* sender);
         void parseCommand(Client* client, const std::string& message);
         void handlePASS(Client* client, const std::vector<std::string>& params);
         void handleNICK(Client* client, const std::vector<std::string>& params);
