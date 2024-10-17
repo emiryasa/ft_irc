@@ -135,6 +135,16 @@ void Server::handleClientMessage(int fd) {
     std::string message(buffer);
 
     Client* client = clients[fd];
+
+    for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
+        std::set<Client*> members = it->second->getMembers();
+        for (std::set<Client *>::iterator it = members.begin(); it != members.end(); ++it) {
+            if (client->getFd() == (*it)->getFd()) {
+                broadcastMessage("A", message, client);
+                return;
+            }
+        }
+    }
     parseCommand(client, message);
 }
 
@@ -164,7 +174,7 @@ void Server::parseCommand(Client* client, const std::string& message) {
         std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
         if (!client->getIsAuthenticated() && command != "PASS") {
-            sendMessage(client->getFd(), "ERROR :You must log in with PASS first\r\n");
+            sendMessage(client->getFd(), "You must log in with PASS first\n");
             continue;
         }
 
@@ -182,18 +192,9 @@ void Server::parseCommand(Client* client, const std::string& message) {
         } else if (command == "PING") {
             handlePING(client, params);
         } else if (command == "CREATE") {
-            if (params.empty())
-                sendMessage(client->getFd(), "Error: No channel name given\r\n");
-            else
-                createChannel(params[0]);
+            createChannel(client, params);
         } else if (command == "JOIN") {
-            if (params.empty())
-                sendMessage(client->getFd(), "Error: ERROR :No channel name given\r\n");
-            else
-                joinChannel(client, params[0]);
-        }
-        else if (command == "MSG") {
-            broadcastMessageToChannel("BITCOIN", params);
+            joinChannel(client, params);
         } else if (command == "PRIVMSG") {
             handlePRIVMSG(client, params);
         } else if (command == "QUIT") {
@@ -204,23 +205,44 @@ void Server::parseCommand(Client* client, const std::string& message) {
     }
 }
 
-void Server::createChannel(const std::string& name) {
+void Server::createChannel(Client *client, std::vector<std::string>& params) {
+    if (params.size() < 2) {
+        sendMessage(client->getFd(), "Error Usage: JOIN <channel name> <password>\r\n");
+        return;
+    }
+
+    std::string name = params[0];
+    std::string pass = params[1];
+
     if (channels.find(name) == channels.end()) {
         channels[name] = new Channel(name);
-        std::cout << GREEN_COLOR << "Channel created: " << name << RESET_COLOR << std::endl;
+        channels[name]->setPassword(pass);
+        std::cout << GREEN_COLOR << "Channel created: " << name << " password is " << pass <<  RESET_COLOR << std::endl;
     }
 }
 
-void Server::joinChannel(Client *client, const std::string &name) {
+void Server::joinChannel(Client *client, std::vector<std::string>& params) {
+    if (params.size() < 2) {
+        sendMessage(client->getFd(), "Error Usage: JOIN <channel name> <password>\r\n");
+        return;
+    }
+
+    std::string name = params[0];
+    std::string pass = params[1];
+
     if (channels.find(name) == channels.end())
         sendMessage(client->getFd(), "ERROR :Channel does not exist\r\n");
     else {
-        channels[name]->addMember(client);
-        std::cout << GREEN_COLOR << client->getNickname() << " joined channel: " << name << RESET_COLOR << std::endl;
+        if (channels[name]->getPassword() == pass) {
+            channels[name]->addMember(client);
+            std::cout << GREEN_COLOR << client->getNickname() << " joined channel: " << name << RESET_COLOR << std::endl;
+        }
+        else
+            sendMessage(client->getFd(), "ERROR :Invalid password\r\n");
     }
 }
 
-void Server::broadcastMessageToChannel(const std::string &channelName, const std::string &message, Client *sender) {
+void Server::broadcastMessage(const std::string &channelName, const std::string &message, Client *sender) {
     if (channels.find(channelName) != channels.end()) {
         std::set<Client*> members = channels[channelName]->getMembers();
         for (std::set<Client *>::iterator it = members.begin(); it != members.end(); ++it) {
@@ -239,9 +261,9 @@ void Server::handlePASS(Client* client, const std::vector<std::string>& params) 
 
     if (params[0] == password) {
         client->setIsAuthenticated(true);
-        sendMessage(client->getFd(), "NOTICE Auth :*** Password accepted\r\n");
+        sendMessage(client->getFd(), "Auth Password accepted\r\n");
     } else {
-        sendMessage(client->getFd(), "ERROR Invalid password\r\n");
+        sendMessage(client->getFd(), "ERROR :Invalid password\r\n");
     }
 }
 
@@ -291,14 +313,12 @@ void Server::handlePRIVMSG(Client* client, const std::vector<std::string>& param
     }
 
     std::string recipient = params[0];
-
-    // Mesaj kısmını boşluklu olarak almak için tüm parametreleri birleştiriyoruz.
     std::string message = params[1];
+
     for (size_t i = 2; i < params.size(); ++i) {
         message += " " + params[i];
     }
 
-    // Alıcıyı bul
     Client* targetClient = NULL;
     for (std::map<int, Client*>::const_iterator it = clients.begin(); it != clients.end(); ++it) {
         if (it->second->getNickname() == recipient) {
