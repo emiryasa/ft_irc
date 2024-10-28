@@ -5,13 +5,14 @@
 
 class Client {
     private:
-        int _fd;
+        int         _fd;
         std::string _nickname;
         std::string _username;
-        bool _isAuthenticated;
-        bool _isOperator;
+        bool        _isAuthenticated;
+        bool        _isOperator;
 
     public:
+        std::string buffer;
         Client(int fd);
 
         int getFd() const;

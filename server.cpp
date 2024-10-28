@@ -35,7 +35,7 @@ void Server::initServer(const std::string& port_str) {
 
     address.sin_family = AF_INET; 
 
-    address.sin_addr.s_addr = INADDR_ANY; // Listen on all interfaces
+    address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
 
     if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
@@ -48,11 +48,12 @@ void Server::initServer(const std::string& port_str) {
         exit(EXIT_FAILURE);
     }
 
-    // Add server_fd to poll_fds
     struct pollfd server_pollfd;
     server_pollfd.fd = server_fd;
     server_pollfd.events = POLLIN;
     poll_fds.push_back(server_pollfd);
+
+    registerCommands();
 
     std::cout << GREEN_COLOR << "Server listening on port " << port << RESET_COLOR << std::endl;
 }
@@ -107,7 +108,10 @@ void Server::acceptNewClient() {
     std::cout << GREEN_COLOR << "New client connected: FD " << client_fd << RESET_COLOR << std::endl;
 }
 
-void Server::removeClient(int fd) {
+void Server::removeClient(Client *client, const std::vector<std::string>& params) {
+    (void)params;
+    int fd = client->getFd();
+
     close(fd);
     delete clients[fd];
     clients.erase(fd);
@@ -127,24 +131,18 @@ void Server::handleClientMessage(int fd) {
     int bytes_received = recv(fd, buffer, BUFFER_SIZE - 1, 0);
 
     if (bytes_received <= 0) {
-        removeClient(fd);
+        Client* client = clients[fd];
+        std::vector<std::string> params;
+        removeClient(client, params);
         return;
     }
-
+    
     buffer[bytes_received] = '\0';
     std::string message(buffer);
 
+    std::cout << "Message received: " << buffer << std::endl;
     Client* client = clients[fd];
 
-    for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
-        std::set<Client*> members = it->second->getMembers();
-        for (std::set<Client *>::iterator it = members.begin(); it != members.end(); ++it) {
-            if (client->getFd() == (*it)->getFd()) {
-                broadcastMessage("A", message, client);
-                return;
-            }
-        }
-    }
     parseCommand(client, message);
 }
 
@@ -152,10 +150,121 @@ void Server::sendMessage(int fd, const std::string& message) {
     send(fd, message.c_str(), message.length(), 0);
 }
 
+// void Server::parseChannelCommand(Channel *channel, Client* client, const std::string& message) {
+//     std::string msg = message;
+//     size_t pos;
+//     while ((pos = msg.find("\n")) != std::string::npos) {
+//         std::string line = msg.substr(0, pos);
+//         msg.erase(0, pos + 2);
+
+//         if (line.empty()) continue;
+
+//         std::istringstream iss(line);
+//         std::string command;
+//         iss >> command;
+
+//         std::vector<std::string> params;
+//         std::string param;
+//         while (iss >> param) {
+//             params.push_back(param);
+//         }
+//         std::cout << "Command in Channel: " << command << std::endl;
+
+//         if (command == "MSG") {
+//             channel->broadcastMessage(message + "\r\n", client);
+//         } else if (command == "DELETE") {
+//             deleteChannel(client);
+//         } else if (command == "LEAVE") {
+//             leaveChannel(client);
+//         } else if (command == "KICK") {
+//             if (params.size() != 1) {
+//                 sendMessage(client->getFd(), "ERROR :Usage: KICK <nickname>\r\n");
+//                 return;
+//             }
+//             channel->kickMember(client, params[0]);
+//         }
+//         else {
+//             sendMessage(client->getFd(), "ERROR :Unknown command\r\n");
+//         }
+//     }
+// }
+
+// void Server::parseCommand(Client* client, const std::string& message) {
+//     std::string msg = message;
+//     size_t pos;
+//     while ((pos = msg.find("\n")) != std::string::npos) {
+//         std::string line = msg.substr(0, pos);
+//         msg.erase(0, pos + 2);
+
+//         if (line.empty()) continue;
+
+//         std::istringstream iss(line);
+//         std::string command;
+//         iss >> command;
+
+//         std::vector<std::string> params;
+//         std::string param;
+//         while (iss >> param) {
+//             params.push_back(param);
+//         }
+//         std::cout << command << std::endl;
+
+//         if (!client->getIsAuthenticated() && command != "PASS") {
+//             sendMessage(client->getFd(), "You must log in with PASS first\n");
+//             continue;
+//         }
+
+//         if (client->getNickname().empty() && command != "NICK" && command != "PASS") {
+//             sendMessage(client->getFd(), "ERROR You must set a nickname first with NICK\r\n");
+//             continue;
+//         }
+
+//         if (command == "PASS") {
+//             handlePASS(client, params);
+//         } else if (command == "NICK") {
+//             handleNICK(client, params);
+//         } else if (command == "USER") {
+//             handleUSER(client, params);
+//         } else if (command == "PING") {
+//             handlePING(client, params);
+//         } else if (command == "CREATE") {
+//             createChannel(client, params);
+//         } else if (command == "JOIN") {
+//             joinChannel(client, params);
+//         } else if (command == "LIST") {
+//             listChannels(client->getFd());
+//         } else if (command == "PRIVMSG") {
+//             handlePRIVMSG(client, params);
+//         } else if (command == "QUIT") {
+//             removeClient(client->getFd());
+//         } else {
+//             sendMessage(client->getFd(), "ERROR :Unknown command\r\n");
+//         }
+//     }
+// }
+
+void Server::registerCommands() {
+    // Genel komutlar
+    command_map["PASS"] = &Server::handlePASS;
+    command_map["NICK"] = &Server::handleNICK;
+    command_map["USER"] = &Server::handleUSER;
+    command_map["PING"] = &Server::handlePING;
+    command_map["CREATE"] = &Server::createChannel;
+    command_map["JOIN"] = &Server::joinChannel;
+    command_map["LIST"] = &Server::listChannels;
+    command_map["PRIVMSG"] = &Server::handlePRIVMSG;
+    command_map["QUIT"] = &Server::removeClient;
+
+    // Kanal komutları
+    channel_command_map["DELETE"] = &Server::deleteChannel;
+    channel_command_map["LEAVE"] = &Server::leaveChannel;
+    // channel_command_map["KICK"] = &Server::kickMemberFromChannel;
+}
+
 void Server::parseCommand(Client* client, const std::string& message) {
     std::string msg = message;
     size_t pos;
-    while ((pos = msg.find("\r\n")) != std::string::npos) {
+    while ((pos = msg.find("\n")) != std::string::npos) {
         std::string line = msg.substr(0, pos);
         msg.erase(0, pos + 2);
 
@@ -171,7 +280,6 @@ void Server::parseCommand(Client* client, const std::string& message) {
             params.push_back(param);
         }
         std::cout << command << std::endl;
-        std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
         if (!client->getIsAuthenticated() && command != "PASS") {
             sendMessage(client->getFd(), "You must log in with PASS first\n");
@@ -179,35 +287,92 @@ void Server::parseCommand(Client* client, const std::string& message) {
         }
 
         if (client->getNickname().empty() && command != "NICK" && command != "PASS") {
-            sendMessage(client->getFd(), "ERROR :You must set a nickname first with NICK\r\n");
+            sendMessage(client->getFd(), "ERROR You must set a nickname first with NICK\r\n");
             continue;
         }
 
-        if (command == "PASS") {
-            handlePASS(client, params);
-        } else if (command == "NICK") {
-            handleNICK(client, params);
-        } else if (command == "USER") {
-            handleUSER(client, params);
-        } else if (command == "PING") {
-            handlePING(client, params);
-        } else if (command == "CREATE") {
-            createChannel(client, params);
-        } else if (command == "JOIN") {
-            joinChannel(client, params);
-        } else if (command == "PRIVMSG") {
-            handlePRIVMSG(client, params);
-        } else if (command == "QUIT") {
-            removeClient(client->getFd());
-        } else {
-            sendMessage(client->getFd(), "ERROR :Unknown command\r\n");
+    // Kanal içerisindeki komutlar için.
+    for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
+        if (it->second->isMember(client)) {
+            if (channel_command_map.find(command) != channel_command_map.end()) {
+                (this->*channel_command_map[command])(client);
+            }
+            else {
+                it->second->broadcastMessage(message, client);
+            }
+            return;
         }
+    }
+
+    // Server komutları için.
+    if (command_map.find(command) != command_map.end()) {
+        (this->*command_map[command])(client, params);
+    } else {
+        sendMessage(client->getFd(), "ERROR :Unknown command\r\n");
+    }
     }
 }
 
-void Server::createChannel(Client *client, std::vector<std::string>& params) {
+void Server::listChannels(Client *client, const std::vector<std::string>& params) {
+    (void)params;
+    if (channels.empty()) {
+        sendMessage(client->getFd(), "No available channels.\r\n");
+        return;
+    }
+
+    std::string channel_list = "Available channels:\r\n";
+    for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
+        std::string channel_name = it->first;
+        int member_count = it->second->getMembers().size();
+
+        std::stringstream ss;
+        ss << member_count;
+
+        channel_list += channel_name + " (" + ss.str() + " members)\r\n";
+    }
+
+    sendMessage(client->getFd(), channel_list);
+}
+
+void Server::deleteChannel(Client *client) {
+    bool found = false;
+
+    for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
+        Channel* channel = it->second;
+
+        if (channel->isMember(client)) {
+            channel->deleteChannel(client);
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        sendMessage(client->getFd(), "ERROR :You are not in any channel\r\n");
+    }
+}
+
+void Server::leaveChannel(Client* client) {
+    bool found = false;
+
+    for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
+        Channel* channel = it->second;
+
+        if (channel->isMember(client)) {
+            channel->leaveChannel(client);
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        sendMessage(client->getFd(), "ERROR :You are not in any channel\r\n");
+    }
+}
+
+void Server::createChannel(Client *client, const std::vector<std::string>& params) {
     if (params.size() < 2) {
-        sendMessage(client->getFd(), "Error Usage: JOIN <channel name> <password>\r\n");
+        sendMessage(client->getFd(), "Error Usage: CREATE <channel name> <password>\r\n");
         return;
     }
 
@@ -215,13 +380,14 @@ void Server::createChannel(Client *client, std::vector<std::string>& params) {
     std::string pass = params[1];
 
     if (channels.find(name) == channels.end()) {
-        channels[name] = new Channel(name);
+        channels[name] = new Channel(name, this);
         channels[name]->setPassword(pass);
+        channels[name]->addOp(client);
         std::cout << GREEN_COLOR << "Channel created: " << name << " password is " << pass <<  RESET_COLOR << std::endl;
     }
 }
 
-void Server::joinChannel(Client *client, std::vector<std::string>& params) {
+void Server::joinChannel(Client *client, const std::vector<std::string>& params) {
     if (params.size() < 2) {
         sendMessage(client->getFd(), "Error Usage: JOIN <channel name> <password>\r\n");
         return;
@@ -239,17 +405,6 @@ void Server::joinChannel(Client *client, std::vector<std::string>& params) {
         }
         else
             sendMessage(client->getFd(), "ERROR :Invalid password\r\n");
-    }
-}
-
-void Server::broadcastMessage(const std::string &channelName, const std::string &message, Client *sender) {
-    if (channels.find(channelName) != channels.end()) {
-        std::set<Client*> members = channels[channelName]->getMembers();
-        for (std::set<Client *>::iterator it = members.begin(); it != members.end(); ++it) {
-            if (*it != sender) {
-                sendMessage((*it)->getFd(), message);
-            }
-        }
     }
 }
 

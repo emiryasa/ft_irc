@@ -25,33 +25,44 @@
 #define RED_COLOR "\033[31m"
 #define GREEN_COLOR "\033[32m"
 
+class Channel;
+
 class Server {
     private:
         int server_fd;
         std::string password;
         std::map<int, Client*> clients;
-        std::map<std::string, Channel*> channels;
         std::vector<struct pollfd> poll_fds;
+        std::map<std::string, Channel*> channels;
+
+        typedef void (Server::*CommandFunc)(Client*, const std::vector<std::string>&);
+        typedef void (Server::*ChannelCommandFunc)(Client*);
+
+        std::map<std::string, CommandFunc> command_map;
+        std::map<std::string, ChannelCommandFunc> channel_command_map;
 
         void initServer(const std::string& port_str);
         void acceptNewClient();
-        void removeClient(int fd);
+        void removeClient(Client *client, const std::vector<std::string>& params);
         void handleClientMessage(int fd);
-        void sendMessage(int fd, const std::string& message);
         void setNonBlocking(int fd);
-        void createChannel(Client *client, std::vector<std::string>& params);
-        void joinChannel(Client *client, std::vector<std::string>& params);
+        void createChannel(Client *client, const std::vector<std::string>& params);
+        void joinChannel(Client *client, const std::vector<std::string>& params);
+        void listChannels(Client *client, const std::vector<std::string>& params);
+        void leaveChannel(Client* client);
+        void deleteChannel(Client *client);
+        // void parseChannelCommand(Channel *channel, Client* client, const std::string& message);
         void parseCommand(Client* client, const std::string& message);
-        void handlePASS(Client* client, const std::vector<std::string>& params);
+        void registerCommands();
+        void handlePASS(Client*, const std::vector<std::string>& params);
         void handleNICK(Client* client, const std::vector<std::string>& params);
         void handleUSER(Client* client, const std::vector<std::string>& params);
         void handlePING(Client* client, const std::vector<std::string>& params);
         void handlePRIVMSG(Client* client, const std::vector<std::string>& params);
-        void broadcastMessage(const std::string &channelName, const std::string &message, Client *sender);
 
     public:
         Server(const std::string& port_str, const std::string& password);
         ~Server();
         void run();
-
+        void sendMessage(int fd, const std::string& message);
 };
