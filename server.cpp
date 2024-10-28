@@ -244,7 +244,6 @@ void Server::sendMessage(int fd, const std::string& message) {
 // }
 
 void Server::registerCommands() {
-    // Genel komutlar
     command_map["PASS"] = &Server::handlePASS;
     command_map["NICK"] = &Server::handleNICK;
     command_map["USER"] = &Server::handleUSER;
@@ -255,10 +254,11 @@ void Server::registerCommands() {
     command_map["PRIVMSG"] = &Server::handlePRIVMSG;
     command_map["QUIT"] = &Server::removeClient;
 
-    // Kanal komutları
     channel_command_map["DELETE"] = &Server::deleteChannel;
     channel_command_map["LEAVE"] = &Server::leaveChannel;
-    // channel_command_map["KICK"] = &Server::kickMemberFromChannel;
+    channel_command_map["KICK"] = &Server::kickMemberFromChannel;
+    channel_command_map["ADDOP"] = &Server::addOpToChannel;
+    channel_command_map["KICK"] = &Server::kickMemberFromChannel;
 }
 
 void Server::parseCommand(Client* client, const std::string& message) {
@@ -295,7 +295,7 @@ void Server::parseCommand(Client* client, const std::string& message) {
     for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
         if (it->second->isMember(client)) {
             if (channel_command_map.find(command) != channel_command_map.end()) {
-                (this->*channel_command_map[command])(client);
+                (this->*channel_command_map[command])(client, params);
             }
             else {
                 it->second->broadcastMessage(message, client);
@@ -315,6 +315,7 @@ void Server::parseCommand(Client* client, const std::string& message) {
 
 void Server::listChannels(Client *client, const std::vector<std::string>& params) {
     (void)params;
+
     if (channels.empty()) {
         sendMessage(client->getFd(), "No available channels.\r\n");
         return;
@@ -334,7 +335,8 @@ void Server::listChannels(Client *client, const std::vector<std::string>& params
     sendMessage(client->getFd(), channel_list);
 }
 
-void Server::deleteChannel(Client *client) {
+void Server::deleteChannel(Client *client, const std::vector<std::string>& params) {
+    (void)params;
     bool found = false;
 
     for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
@@ -352,7 +354,8 @@ void Server::deleteChannel(Client *client) {
     }
 }
 
-void Server::leaveChannel(Client* client) {
+void Server::leaveChannel(Client* client,  const std::vector<std::string>& params) {
+    (void)params;
     bool found = false;
 
     for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
@@ -384,11 +387,12 @@ void Server::createChannel(Client *client, const std::vector<std::string>& param
         channels[name]->setPassword(pass);
         channels[name]->addOp(client);
         std::cout << GREEN_COLOR << "Channel created: " << name << " password is " << pass <<  RESET_COLOR << std::endl;
+        sendMessage(client->getFd(), "SUCCESS :Channel successfully created.\r\n");
     }
 }
 
 void Server::joinChannel(Client *client, const std::vector<std::string>& params) {
-    if (params.size() < 2) {
+    if (params.size() != 2) {
         sendMessage(client->getFd(), "Error Usage: JOIN <channel name> <password>\r\n");
         return;
     }
@@ -406,6 +410,52 @@ void Server::joinChannel(Client *client, const std::vector<std::string>& params)
         else
             sendMessage(client->getFd(), "ERROR :Invalid password\r\n");
     }
+}
+
+void Server::kickMemberFromChannel(Client* client, const std::vector<std::string>& params) {
+    if (params.size() != 1) {
+        sendMessage(client->getFd(), "ERROR :No nickname given\r\n");
+        return;
+    }
+
+    std::string nickname = params[0];
+
+    for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
+        Channel* channel = it->second;
+
+        if (channel->isMember(client)) {
+            channel->kickMember(client, nickname);
+            return;
+        }
+    }
+}
+
+
+void Server::addOpToChannel(Client* client, const std::vector<std::string>& params) {
+    if (params.size() != 1) {
+        sendMessage(client->getFd(), "ERROR :No nickname given\r\n");
+        return;
+    }
+
+    std::string nickname = params[0];
+
+    for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
+        Channel* channel = it->second;
+
+        if (channel->isMember(client) && channel->isOp(client)) {
+            for (std::set<Client*>::iterator memberIt = channel->getMembers().begin(); memberIt != channel->getMembers().end(); ++memberIt) {
+                if ((*memberIt)->getNickname() == nickname) {
+                    channel->addOp(*memberIt);
+                    sendMessage(client->getFd(), "SUCCESS :User has been made op\r\n");
+                    return;
+                }
+            }
+            sendMessage(client->getFd(), "ERROR :User not found in this channel\r\n");
+            return;
+        }
+    }
+
+    sendMessage(client->getFd(), "ERROR :You are not a member of any channel or you are not op\r\n");
 }
 
 void Server::handlePASS(Client* client, const std::vector<std::string>& params) {

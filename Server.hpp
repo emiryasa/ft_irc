@@ -36,7 +36,7 @@ class Server {
         std::map<std::string, Channel*> channels;
 
         typedef void (Server::*CommandFunc)(Client*, const std::vector<std::string>&);
-        typedef void (Server::*ChannelCommandFunc)(Client*);
+        typedef void (Server::*ChannelCommandFunc)(Client*, const std::vector<std::string>&);
 
         std::map<std::string, CommandFunc> command_map;
         std::map<std::string, ChannelCommandFunc> channel_command_map;
@@ -49,9 +49,10 @@ class Server {
         void createChannel(Client *client, const std::vector<std::string>& params);
         void joinChannel(Client *client, const std::vector<std::string>& params);
         void listChannels(Client *client, const std::vector<std::string>& params);
-        void leaveChannel(Client* client);
-        void deleteChannel(Client *client);
-        // void parseChannelCommand(Channel *channel, Client* client, const std::string& message);
+        void leaveChannel(Client* client, const std::vector<std::string>& params);
+        void deleteChannel(Client *client, const std::vector<std::string>& params);
+        void kickMemberFromChannel(Client *client, const std::vector<std::string>& params);
+        void addOpToChannel(Client* client, const std::vector<std::string>& params);
         void parseCommand(Client* client, const std::string& message);
         void registerCommands();
         void handlePASS(Client*, const std::vector<std::string>& params);
