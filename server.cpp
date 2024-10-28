@@ -375,21 +375,27 @@ void Server::leaveChannel(Client* client,  const std::vector<std::string>& param
 
 void Server::createChannel(Client *client, const std::vector<std::string>& params) {
     if (params.size() < 2) {
-        sendMessage(client->getFd(), "Error Usage: CREATE <channel name> <password>\r\n");
+        sendMessage(client->getFd(), "Error: Usage: CREATE <channel name> <password>\r\n");
         return;
     }
 
     std::string name = params[0];
     std::string pass = params[1];
 
-    if (channels.find(name) == channels.end()) {
-        channels[name] = new Channel(name, this);
-        channels[name]->setPassword(pass);
-        channels[name]->addOp(client);
-        std::cout << GREEN_COLOR << "Channel created: " << name << " password is " << pass <<  RESET_COLOR << std::endl;
-        sendMessage(client->getFd(), "SUCCESS :Channel successfully created.\r\n");
+    if (channels.find(name) != channels.end()) {
+        sendMessage(client->getFd(), "Error: Channel already exists.\r\n");
+        return;
     }
+
+    Channel* new_channel = new Channel(name, this);
+    new_channel->setPassword(pass);
+    new_channel->addMember(client);
+
+    channels[name] = new_channel;
+
+    sendMessage(client->getFd(), "Channel created successfully: " + name + "\r\n");
 }
+
 
 void Server::joinChannel(Client *client, const std::vector<std::string>& params) {
     if (params.size() != 2) {
