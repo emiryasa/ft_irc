@@ -17,12 +17,12 @@ void Server::setNonBlocking(int fd) {
 }
 
 void Server::initServer(const std::string& port_str) {
-    int port = atoi(port_str.c_str());
+    int port = std::atoi(port_str.c_str());
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == -1) {
         std::cerr << RED_COLOR << "Socket creation failed" << RESET_COLOR << std::endl;
-        exit(EXIT_FAILURE);
+        std::exit(EXIT_FAILURE);
     }
 
     setNonBlocking(server_fd);
@@ -40,12 +40,12 @@ void Server::initServer(const std::string& port_str) {
 
     if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
         std::cerr << RED_COLOR << "Bind failed" << RESET_COLOR << std::endl;
-        exit(EXIT_FAILURE);
+        std::exit(EXIT_FAILURE);
     }
 
     if (listen(server_fd, SOMAXCONN) < 0) {
         std::cerr << RED_COLOR << "Listen failed" << RESET_COLOR << std::endl;
-        exit(EXIT_FAILURE);
+        std::exit(EXIT_FAILURE);
     }
 
     struct pollfd server_pollfd;
@@ -64,7 +64,7 @@ void Server::run() {
 
         if (poll_count == -1) {
             std::cerr << RED_COLOR << "Poll error: " << strerror(errno) << RESET_COLOR << std::endl;
-            exit(EXIT_FAILURE);
+            std::exit(EXIT_FAILURE);
         }
 
         for (size_t i = 0; i < poll_fds.size(); ++i) {
