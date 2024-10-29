@@ -66,6 +66,8 @@ class Server {
         void createChannel(Client *client, const std::vector<std::string>& params);
         void joinChannel(Client *client, const std::vector<std::string>& params);
         void listChannels(Client *client, const std::vector<std::string>& params);
+        void sendWelcomeMessage(Client *client);
+        const std::string Prefix(Client *client) const;
 
     public:
         Server(const std::string& port_str, const std::string& password);

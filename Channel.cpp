@@ -40,7 +40,7 @@ void Channel::kickMember(Client* client, const std::string& nickname) {
         if ((*it)->getNickname() == nickname) {
             _server->sendMessage((*it)->getFd(), "You have been kicked from the channel\r\n");
             _members.erase(*it);
-            std::cout << RED_COLOR << nickname << " has been kicked from the channel." << RESET_COLOR << std::endl;
+            std::cout << RED_COLOR << nickname << " has been kicked from the channel " << getName() << RESET_COLOR << std::endl;
             _server->sendMessage(client->getFd(), "SUCCESS :User has been kicked from the channel\r\n");
             return;
         }

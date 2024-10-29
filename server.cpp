@@ -28,7 +28,9 @@ void Server::initServer(const std::string& port_str) {
     setNonBlocking(server_fd);
 
     int opt = 1;
-    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+        std::cerr << RED_COLOR << "Set socket options failed" << RESET_COLOR << std::endl;
+    }
 
     sockaddr_in address;
     std::memset(&address, 0, sizeof(address));
@@ -151,10 +153,17 @@ void Server::sendMessage(int fd, const std::string& message) {
     send(fd, message.c_str(), message.length(), 0);
 }
 
+void Server::sendWelcomeMessage(Client *client) {
+    sendMessage(client->getFd(), ":" + client->getHostname() + " 001 " + client->getNickname() + " :Welcome to the Internet Relay Network " + client->getNickname() + "!" + "@" + client->getHostname() + "\r\n");
+    sendMessage(client->getFd(), ":" + client->getHostname() + " 002 " + client->getNickname() + " :Your host is " + client->getHostname() + "\r\n");
+    sendMessage(client->getFd(), ":" + client->getHostname() + " 003 " + client->getNickname() + " :This server was created\r\n");
+}
+
 void Server::registerCommands() {
     command_map["PASS"] = &Server::handlePASS;
     command_map["NICK"] = &Server::handleNICK;
     command_map["USER"] = &Server::handleUSER;
+    command_map["PING"] = &Server::handlePING;
     command_map["CREATE"] = &Server::createChannel;
     command_map["JOIN"] = &Server::joinChannel;
     command_map["LIST"] = &Server::listChannels;
@@ -186,19 +195,17 @@ void Server::parseCommand(Client* client, const std::string& message) {
         while (iss >> param) {
             params.push_back(param);
         }
-        std::cout << command << std::endl;
 
         if (!client->getIsAuthenticated() && command != "PASS") {
-            sendMessage(client->getFd(), "You must log in with PASS first\n");
+            sendMessage(client->getFd(), Prefix(client) + "You must log in with PASS first\r\n");
             continue;
         }
 
         if (client->getNickname().empty() && command != "NICK" && command != "PASS") {
-            sendMessage(client->getFd(), "ERROR You must set a nickname first with NICK\r\n");
+            sendMessage(client->getFd(), Prefix(client) + "ERROR You must set a nickname first with NICK\r\n");
             continue;
         }
 
-    // Kanal içerisindeki komutlar için.
     for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
         if (it->second->isMember(client)) {
             if (channel_command_map.find(command) != channel_command_map.end()) {
@@ -211,11 +218,10 @@ void Server::parseCommand(Client* client, const std::string& message) {
         }
     }
 
-    // Server komutları için.
     if (command_map.find(command) != command_map.end()) {
         (this->*command_map[command])(client, params);
     } else {
-        sendMessage(client->getFd(), "ERROR :Unknown command\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :Unknown command\r\n");
     }
     }
 }
@@ -224,7 +230,7 @@ void Server::listChannels(Client *client, const std::vector<std::string>& params
     (void)params;
 
     if (channels.empty()) {
-        sendMessage(client->getFd(), "No available channels.\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERRROR :No available channels.\r\n");
         return;
     }
 
@@ -239,14 +245,13 @@ void Server::listChannels(Client *client, const std::vector<std::string>& params
         channel_list += channel_name + " (" + ss.str() + " members)\r\n";
     }
 
-    sendMessage(client->getFd(), channel_list);
+    sendMessage(client->getFd(), Prefix(client) + channel_list);
 }
 
 void Server::deleteChannel(Channel *channel, Client *client, const std::vector<std::string>& params) {
     (void)params;
 
     channel->deleteChannel(client);
-
 }
 
 void Server::leaveChannel(Channel *channel, Client* client,  const std::vector<std::string>& params) {
@@ -263,7 +268,7 @@ void Server::listChannelMembers(Channel *channel, Client *client, const std::vec
 
 void Server::createChannel(Client *client, const std::vector<std::string>& params) {
     if (params.size() < 2) {
-        sendMessage(client->getFd(), "Error: Usage: CREATE <channel name> <password>\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "Error: Usage: CREATE <channel name> <password>\r\n");
         return;
     }
 
@@ -271,7 +276,7 @@ void Server::createChannel(Client *client, const std::vector<std::string>& param
     std::string pass = params[1];
 
     if (channels.find(name) != channels.end()) {
-        sendMessage(client->getFd(), "Error: Channel already exists.\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "Error: Channel already exists.\r\n");
         return;
     }
 
@@ -281,13 +286,12 @@ void Server::createChannel(Client *client, const std::vector<std::string>& param
     new_channel->addOp(client);
     channels[name] = new_channel;
 
-    sendMessage(client->getFd(), "Channel created successfully: " + name + "\r\n");
+    sendMessage(client->getFd(), Prefix(client) + "Channel created successfully: " + name + "\r\n");
 }
-
 
 void Server::joinChannel(Client *client, const std::vector<std::string>& params) {
     if (params.size() != 2) {
-        sendMessage(client->getFd(), "Error Usage: JOIN <channel name> <password>\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "Error Usage: JOIN <channel name> <password>\r\n");
         return;
     }
 
@@ -295,21 +299,21 @@ void Server::joinChannel(Client *client, const std::vector<std::string>& params)
     std::string pass = params[1];
 
     if (channels.find(name) == channels.end())
-        sendMessage(client->getFd(), "ERROR :Channel does not exist\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :Channel does not exist\r\n");
     else {
         if (channels[name]->getPassword() == pass) {
             channels[name]->addMember(client);
             std::cout << GREEN_COLOR << client->getNickname() << " joined channel: " << name << RESET_COLOR << std::endl;
-            sendMessage(client->getFd(), "SUCCESS :You have joined the channel\r\n");
+            sendMessage(client->getFd(), Prefix(client) + "SUCCESS :You have joined the channel\r\n");
         }
         else
-            sendMessage(client->getFd(), "ERROR :Invalid password\r\n");
+            sendMessage(client->getFd(), Prefix(client) + "ERROR :Invalid password\r\n");
     }
 }
 
 void Server::kickMemberFromChannel(Channel *channel, Client* client, const std::vector<std::string>& params) {
     if (params.size() != 1) {
-        sendMessage(client->getFd(), "ERROR :No nickname given\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :No nickname given\r\n");
         return;
     }
 
@@ -318,10 +322,9 @@ void Server::kickMemberFromChannel(Channel *channel, Client* client, const std::
     channel->kickMember(client, nickname);
 }
 
-
 void Server::addOpToChannel(Channel *channel, Client* client, const std::vector<std::string>& params) {
     if (params.size() != 1) {
-        sendMessage(client->getFd(), "ERROR :No nickname given\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :No nickname given\r\n");
         return;
     }
 
@@ -329,7 +332,7 @@ void Server::addOpToChannel(Channel *channel, Client* client, const std::vector<
     if (channel->isOp(client)) {
         if (client->getNickname() == nickname) 
         {
-            sendMessage(client->getFd(), "ERROR :You cannot make yourself op\r\n");
+            sendMessage(client->getFd(), Prefix(client) + "ERROR :You cannot make yourself op\r\n");
             return;
         }
         std::set<Client *> members = channel->getMembers();
@@ -337,33 +340,33 @@ void Server::addOpToChannel(Channel *channel, Client* client, const std::vector<
 
             if ((*memberIt)->getNickname() == nickname) {
                 channel->addOp(*memberIt);
-                sendMessage(client->getFd(), "SUCCESS :User has been made op\r\n");
+                sendMessage(client->getFd(), Prefix(client) + "SUCCESS :User has been made op\r\n");
                 return;
             }
         }
-        sendMessage(client->getFd(), "ERROR :User not found in this channel\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :User not found in this channel\r\n");
         return;
     }
-    sendMessage(client->getFd(), "ERROR :You are not op\r\n");
+    sendMessage(client->getFd(), Prefix(client) + "ERROR :You are not op\r\n");
 }
 
 void Server::handlePASS(Client* client, const std::vector<std::string>& params) {
     if (params.empty()) {
-        sendMessage(client->getFd(), "ERROR :No password given\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :No password given\r\n");
         return;
     }
 
     if (params[0] == password) {
         client->setIsAuthenticated(true);
-        sendMessage(client->getFd(), "Auth Password accepted\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "SUCCESS :Auth Password accepted\r\n");
     } else {
-        sendMessage(client->getFd(), "ERROR :Invalid password\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :Invalid password\r\n");
     }
 }
 
 void Server::handleNICK(Client* client, const std::vector<std::string>& params) {
     if (params.empty()) {
-        sendMessage(client->getFd(), "ERROR :No nickname given\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :No nickname given\r\n");
         return;
     }
 
@@ -377,32 +380,37 @@ void Server::handleNICK(Client* client, const std::vector<std::string>& params) 
     }
 
     client->setNickname(new_nickname);
-    sendMessage(client->getFd(), "NOTICE Nick :*** Nickname set\r\n");
+    sendMessage(client->getFd(), Prefix(client) + "SUCCESS :Nickname set to " + new_nickname + "\r\n");
 }
 
 void Server::handleUSER(Client* client, const std::vector<std::string>& params) {
-    if (params.size() < 4) {
-        sendMessage(client->getFd(), "ERROR :Not enough parameters\r\n");
+    if (params.size() != 4) {
+        sendMessage(client->getFd(), Prefix(client) + "ERROR : Usage: USER <username> <hostname> <servername> <realname>\r\n");
         return;
     }
 
     client->setUsername(params[0]);
-    sendMessage(client->getFd(), "NOTICE User :*** User registered\r\n");
+    client->setHostname(params[1]);
+    client->setServername(params[2]);
+    client->setRealname(params[3]);
+    
+    sendMessage(client->getFd(), Prefix(client) + "SUCCESS :User registered\r\n");
+    sendWelcomeMessage(client);
 }
 
 void Server::handlePING(Client* client, const std::vector<std::string>& params) {
-    if (params.empty()) {
-        sendMessage(client->getFd(), "ERROR :No PING token given\r\n");
+    if (params.size() != 1) {
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :No PING token given\r\n");
         return;
     }
 
     std::string response = "PONG :" + params[0] + "\r\n";
-    sendMessage(client->getFd(), response);
+    sendMessage(client->getFd(), Prefix(client) + response);
 }
 
 void Server::handlePRIVMSG(Client* client, const std::vector<std::string>& params) {
     if (params.size() < 2) {
-        sendMessage(client->getFd(), "ERROR :Not enough parameters\r\n");
+        sendMessage(client->getFd(),Prefix(client) +  "ERROR :Not enough parameters\r\n");
         return;
     }
 
@@ -422,9 +430,13 @@ void Server::handlePRIVMSG(Client* client, const std::vector<std::string>& param
     }
 
     if (targetClient) {
-        std::string full_message = client->getNickname() + " PRIVMSG " + "TO " + recipient + ": " + message + "\r\n";
-        sendMessage(targetClient->getFd(), full_message);
+        std::string full_message = ":" + client->getNickname() + " PRIVMSG " + recipient + " " + message + "\r\n";
+        sendMessage(targetClient->getFd(), Prefix(client) + full_message);
     } else {
-        sendMessage(client->getFd(), "ERROR :No such nick\r\n");
+        sendMessage(client->getFd(), Prefix(client) + "ERROR :No such nick\r\n");
     }
+}
+
+const std::string Server::Prefix(Client *client) const {
+    return ":" + client->getNickname() + "!" + client->getUsername() + "@" + client->getHostname() + " ";
 }
