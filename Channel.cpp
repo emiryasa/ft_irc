@@ -14,20 +14,12 @@ std::set<Client*> Channel::getMembers() const {
     return _members;
 }
 
-std::string Channel::getTopic() const {
-    return _topic;
-}
-
 std::string Channel::getPassword() const {
     return _password;
 }
 
 void Channel::setPassword(const std::string &password) {
     _password = password;
-}
-
-void Channel::setTopic(const std::string &topic) {
-    _topic = topic;
 }
 
 void Channel::addOp(Client *client) {
@@ -96,11 +88,8 @@ void Channel::deleteChannel(Client *client) {
     }
 }
 
-void Channel::changeTopic(const std::string &topic, Client *client) {
-    if (isOp(client)) {
-        setTopic(topic);
-        broadcastMessage("Channel's topic changed to: " + topic, client);
-    } else {
-        _server->sendMessage(client->getFd(), "ERROR :You are not op\r\n");
+void Channel::listMembers(Client *client) {
+    for (std::set<Client*>::iterator it = _members.begin(); it != _members.end(); ++it) {
+        _server->sendMessage(client->getFd(), (*it)->getNickname());
     }
 }

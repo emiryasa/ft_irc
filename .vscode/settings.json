@@ -1,10 +1,10 @@
 {
+  "C_Cpp_Runner.msvcBatchPath": "",
   "C_Cpp_Runner.cCompilerPath": "clang",
   "C_Cpp_Runner.cppCompilerPath": "clang++",
   "C_Cpp_Runner.debuggerPath": "lldb",
   "C_Cpp_Runner.cStandard": "",
   "C_Cpp_Runner.cppStandard": "",
-  "C_Cpp_Runner.msvcBatchPath": "",
   "C_Cpp_Runner.useMsvc": false,
   "C_Cpp_Runner.warnings": [
     "-Wall",
@@ -107,6 +107,7 @@
     "optional": "cpp",
     "ostream": "cpp",
     "ratio": "cpp",
+    "set": "cpp",
     "sstream": "cpp",
     "stdexcept": "cpp",
     "streambuf": "cpp",
@@ -118,16 +119,6 @@
     "typeinfo": "cpp",
     "unordered_map": "cpp",
     "utility": "cpp",
-    "vector": "cpp",
-    "*.tcc": "cpp",
-    "clocale": "cpp",
-    "compare": "cpp",
-    "concepts": "cpp",
-    "deque": "cpp",
-    "set": "cpp",
-    "memory_resource": "cpp",
-    "numeric": "cpp",
-    "random": "cpp",
-    "numbers": "cpp"
+    "vector": "cpp"
   }
 }
