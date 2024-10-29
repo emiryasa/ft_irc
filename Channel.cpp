@@ -41,6 +41,7 @@ void Channel::kickMember(Client* client, const std::string& nickname) {
             _server->sendMessage((*it)->getFd(), "You have been kicked from the channel\r\n");
             _members.erase(*it);
             std::cout << RED_COLOR << nickname << " has been kicked from the channel." << RESET_COLOR << std::endl;
+            _server->sendMessage(client->getFd(), "SUCCESS :User has been kicked from the channel\r\n");
             return;
         }
     }
@@ -89,7 +90,9 @@ void Channel::deleteChannel(Client *client) {
 }
 
 void Channel::listMembers(Client *client) {
-    for (std::set<Client*>::iterator it = _members.begin(); it != _members.end(); ++it) {
-        _server->sendMessage(client->getFd(), (*it)->getNickname());
+    std::string member_list = "Members of channel " + _name + ":\r\n";
+    for (std::set<Client *>::iterator it = _members.begin(); it != _members.end(); ++it) {
+        member_list += (*it)->getNickname() + "\r\n";
     }
+    _server->sendMessage(client->getFd(), member_list);
 }

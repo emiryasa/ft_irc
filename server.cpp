@@ -155,7 +155,6 @@ void Server::registerCommands() {
     command_map["PASS"] = &Server::handlePASS;
     command_map["NICK"] = &Server::handleNICK;
     command_map["USER"] = &Server::handleUSER;
-    command_map["PING"] = &Server::handlePING;
     command_map["CREATE"] = &Server::createChannel;
     command_map["JOIN"] = &Server::joinChannel;
     command_map["LIST"] = &Server::listChannels;
@@ -164,7 +163,6 @@ void Server::registerCommands() {
 
     channel_command_map["DELETE"] = &Server::deleteChannel;
     channel_command_map["LEAVE"] = &Server::leaveChannel;
-    channel_command_map["KICK"] = &Server::kickMemberFromChannel;
     channel_command_map["ADDOP"] = &Server::addOpToChannel;
     channel_command_map["KICK"] = &Server::kickMemberFromChannel;
     channel_command_map["LSTMEMBERS"] = &Server::listChannelMembers;
@@ -246,16 +244,9 @@ void Server::listChannels(Client *client, const std::vector<std::string>& params
 
 void Server::deleteChannel(Channel *channel, Client *client, const std::vector<std::string>& params) {
     (void)params;
-    bool found = false;
 
-    if (channel->isMember(client)) {
-        channel->deleteChannel(client);
-        found = true;
-    }
+    channel->deleteChannel(client);
 
-    if (!found) {
-        sendMessage(client->getFd(), "ERROR :You are not in any channel\r\n");
-    }
 }
 
 void Server::leaveChannel(Channel *channel, Client* client,  const std::vector<std::string>& params) {
@@ -287,7 +278,7 @@ void Server::createChannel(Client *client, const std::vector<std::string>& param
     Channel* new_channel = new Channel(name, this);
     new_channel->setPassword(pass);
     new_channel->addMember(client);
-
+    new_channel->addOp(client);
     channels[name] = new_channel;
 
     sendMessage(client->getFd(), "Channel created successfully: " + name + "\r\n");
@@ -309,6 +300,7 @@ void Server::joinChannel(Client *client, const std::vector<std::string>& params)
         if (channels[name]->getPassword() == pass) {
             channels[name]->addMember(client);
             std::cout << GREEN_COLOR << client->getNickname() << " joined channel: " << name << RESET_COLOR << std::endl;
+            sendMessage(client->getFd(), "SUCCESS :You have joined the channel\r\n");
         }
         else
             sendMessage(client->getFd(), "ERROR :Invalid password\r\n");
@@ -334,10 +326,15 @@ void Server::addOpToChannel(Channel *channel, Client* client, const std::vector<
     }
 
     std::string nickname = params[0];
-
     if (channel->isOp(client)) {
+        if (client->getNickname() == nickname) 
+        {
+            sendMessage(client->getFd(), "ERROR :You cannot make yourself op\r\n");
+            return;
+        }
         std::set<Client *> members = channel->getMembers();
         for (std::set<Client*>::iterator memberIt = members.begin(); memberIt != members.end(); ++memberIt) {
+
             if ((*memberIt)->getNickname() == nickname) {
                 channel->addOp(*memberIt);
                 sendMessage(client->getFd(), "SUCCESS :User has been made op\r\n");
