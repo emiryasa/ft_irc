@@ -40,6 +40,7 @@ void Channel::kickMember(Client* client, const std::string& nickname) {
         if ((*it)->getNickname() == nickname) {
             _server->sendMessage((*it)->getFd(), "You have been kicked from the channel\r\n");
             _members.erase(*it);
+            _blacklist.push_back(nickname);
             std::cout << RED_COLOR << nickname << " has been kicked from the channel " << getName() << RESET_COLOR << std::endl;
             _server->sendMessage(client->getFd(), "SUCCESS :User has been kicked from the channel\r\n");
             return;
@@ -60,6 +61,10 @@ void Channel::broadcastMessage(const std::string &message, Client *client) {
     }
 }
 
+bool Channel::isBlacklisted(Client *client) const {
+    return std::find(_blacklist.begin(), _blacklist.end(), client->getNickname()) != _blacklist.end();
+}
+
 bool Channel::isMember(Client *client) const {
     return _members.find(client) != _members.end();
 }
@@ -75,19 +80,23 @@ void Channel::leaveChannel(Client* client) {
 void Channel::deleteChannel(Client *client) {
     if (isOp(client)) {
         std::string message = "Channel " + _name + " has been deleted by " + client->getNickname() + "\r\n";
-        
         broadcastMessage(message, client);
 
-        for (std::set<Client *>::iterator it = _members.begin(); it != _members.end(); ++it) {
-            leaveChannel(client);
+        for (std::set<Client *>::iterator it = _members.begin(); it != _members.end(); ) {
+            Client* member = *it;
+            ++it;
+            leaveChannel(member);
         }
 
-        delete this;
+        _server->removeChannel(this);
+
         std::cout << "Channel " << _name << " deleted." << std::endl;
+        delete this;
     } else {
         _server->sendMessage(client->getFd(), "ERROR :You are not op\r\n");
     }
 }
+
 
 void Channel::listMembers(Client *client) {
     std::string member_list = "Members of channel " + _name + ":\r\n";

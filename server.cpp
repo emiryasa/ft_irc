@@ -10,6 +10,9 @@ Server::~Server() {
         close(it->first);
         delete it->second;
     }
+    for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
+        delete it->second;
+    }
 }
 
 void Server::setNonBlocking(int fd) {
@@ -206,6 +209,11 @@ void Server::parseCommand(Client* client, const std::string& message) {
             continue;
         }
 
+        if (client->getHostname().empty() && command != "USER" && command != "PASS" && command != "NICK") {
+            sendMessage(client->getFd(), Prefix(client) + "ERROR You must set a username first with USER\r\n");
+            continue;
+        }
+
     for (std::map<std::string, Channel*>::iterator it = channels.begin(); it != channels.end(); ++it) {
         if (it->second->isMember(client)) {
             if (channel_command_map.find(command) != channel_command_map.end()) {
@@ -252,6 +260,10 @@ void Server::deleteChannel(Channel *channel, Client *client, const std::vector<s
     (void)params;
 
     channel->deleteChannel(client);
+}
+
+void Server::removeChannel(Channel* channel) {
+    channels.erase(channel->getName());
 }
 
 void Server::leaveChannel(Channel *channel, Client* client,  const std::vector<std::string>& params) {
@@ -301,9 +313,14 @@ void Server::joinChannel(Client *client, const std::vector<std::string>& params)
     if (channels.find(name) == channels.end())
         sendMessage(client->getFd(), Prefix(client) + "ERROR :Channel does not exist\r\n");
     else {
+        if (channels[name]->isBlacklisted(client)) {
+            sendMessage(client->getFd(), Prefix(client) + "ERROR :You have been banned from this channel\r\n");
+            return;
+        }
         if (channels[name]->getPassword() == pass) {
             channels[name]->addMember(client);
             std::cout << GREEN_COLOR << client->getNickname() << " joined channel: " << name << RESET_COLOR << std::endl;
+            channels[name]->broadcastMessage(client->getNickname() + " has joined the channel", client);
             sendMessage(client->getFd(), Prefix(client) + "SUCCESS :You have joined the channel\r\n");
         }
         else

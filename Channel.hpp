@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <set>
+#include <vector>
 #include "Client.hpp"
 #include "Server.hpp"
 
@@ -15,6 +16,7 @@ class Channel {
         std::set<Client*>   _members;
         std::set<Client*>   _ops;
         Server              *_server;
+        std::vector<std::string> _blacklist;
 
     public:
         Channel();
@@ -32,5 +34,6 @@ class Channel {
         void addMember(Client *client);
         void kickMember(Client *client, const std::string& nickname);
         void listMembers(Client *client);
+        bool isBlacklisted(Client *client) const;
         ~Channel();
 };

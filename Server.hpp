@@ -66,6 +66,8 @@ class Server {
         void createChannel(Client *client, const std::vector<std::string>& params);
         void joinChannel(Client *client, const std::vector<std::string>& params);
         void listChannels(Client *client, const std::vector<std::string>& params);
+
+        // utils
         void sendWelcomeMessage(Client *client);
         const std::string Prefix(Client *client) const;
 
@@ -74,4 +76,5 @@ class Server {
         ~Server();
         void run();
         void sendMessage(int fd, const std::string& message);
+        void removeChannel(Channel* channel);
 };
