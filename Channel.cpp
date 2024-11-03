@@ -97,7 +97,6 @@ void Channel::deleteChannel(Client *client) {
     }
 }
 
-
 void Channel::listMembers(Client *client) {
     std::string member_list = "Members of channel " + _name + ":\r\n";
     for (std::set<Client *>::iterator it = _members.begin(); it != _members.end(); ++it) {

@@ -24,6 +24,7 @@
 #define RESET_COLOR "\033[0m"
 #define RED_COLOR "\033[31m"
 #define GREEN_COLOR "\033[32m"
+#define PORT_LIMIT 65535
 
 class Channel;
 
@@ -37,9 +38,11 @@ class Server {
 
         typedef void (Server::*CommandFunc)(Client*, const std::vector<std::string>&);
         typedef void (Server::*ChannelCommandFunc)(Channel*, Client*, const std::vector<std::string>&);
+        typedef void (Server::*commonFunc)(Client*, const std::vector<std::string>&);
 
         std::map<std::string, CommandFunc> command_map;
         std::map<std::string, ChannelCommandFunc> channel_command_map;
+        std::map<std::string, commonFunc> common_command_map;
 
         // server functions
         void initServer(const std::string& port_str);
@@ -66,12 +69,14 @@ class Server {
         void createChannel(Client *client, const std::vector<std::string>& params);
         void joinChannel(Client *client, const std::vector<std::string>& params);
         void listChannels(Client *client, const std::vector<std::string>& params);
+        void handleHelp(Client *client, const std::vector<std::string>& params);
 
         // utils
         void sendWelcomeMessage(Client *client);
         const std::string Prefix(Client *client) const;
 
     public:
+        static bool isNumber(const std::string& input);
         Server(const std::string& port_str, const std::string& password);
         ~Server();
         void run();
